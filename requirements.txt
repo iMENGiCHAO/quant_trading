@@ -1,0 +1,31 @@
+# Hyperion Quant v1.0 - 融合GitHub Top 12量化项目
+# ==================================================
+# Python 3.10+
+
+# === 核心依赖 ===
+numpy>=1.24.0
+pandas>=2.0.0
+scipy>=1.10.0
+scikit-learn>=1.3.0
+pyyaml>=6.0
+
+# === 数据源 ===
+akshare>=1.14.0          # 免费A股数据 (Qlib/AkShare)
+# tushare>=1.4.0         # Pro版需要Token
+
+# === 回测 & 优化 ===
+optuna>=3.0.0            # 超参优化 (Freqtrade Hyperopt)
+
+# === ML模型 (可选) ===
+# lightgbm>=4.0.0        # LightGBM (Qlib Model Zoo)
+# torch>=2.0.0           # PyTorch (深度学习)
+# gym>=0.26.0            # Gym (FinRL RL环境)
+
+# === 可视化 (可选) ===
+matplotlib>=3.7.0
+# seaborn>=0.13.0
+
+# === 工具 ===
+tqdm>=4.65.0
+joblib>=1.3.0
+python-dateutil>=2.8.0

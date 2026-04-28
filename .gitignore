@@ -1,0 +1,56 @@
+# ====== Python ======
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg-info/
+dist/
+build/
+*.egg
+
+# ====== Data & Database ======
+*.db
+*.sqlite3
+*.parquet
+*.csv.gz
+data/raw/
+
+# ====== macOS ======
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+
+# ====== IDE ======
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# ====== Jupyter ======
+.ipynb_checkpoints/
+
+# ====== Environment ======
+.env
+.venv/
+venv/
+env/
+
+# ====== Reports ======
+reports/*.docx
+reports/*.pdf
+*.html
+backtest_report.json
+
+# ====== Logs ======
+*.log
+logs/
+
+# ====== Model checkpoints ======
+*.pt
+*.pth
+*.onnx
+
+# ====== Config ======
+~/.quant_trading/
