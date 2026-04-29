@@ -1,6 +1,6 @@
 # Hyperion Quant v1.0
 
-> **融合 GitHub Top 12 量化交易项目精华，打造华尔街级 A 股量化交易系统**
+> **融合 GitHub Top 12 量化交易项目精华，打造专业 A 股量化交易研究框架**
 
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/)
 [![License MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
