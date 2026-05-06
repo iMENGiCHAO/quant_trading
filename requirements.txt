@@ -1,0 +1,54 @@
+# Hyperion+ v27 — 完整依赖清单
+# =============================
+# Python 3.10+
+# 核心: 因子 -> 建模 -> 回测 -> 组合优化 -> 高频 全链路
+
+# === 核心依赖 (必须) ===
+numpy>=1.24.0
+pandas>=2.0.0
+scipy>=1.10.0
+scikit-learn>=1.3.0
+pyyaml>=6.0
+tqdm>=4.65.0
+joblib>=1.3.0
+python-dateutil>=2.8.0
+
+# === 中国A股数据 ===
+akshare>=1.14.0               # 中国股票/指数/K线/财务数据
+
+# === 提升树模型 (核心) ===
+lightgbm>=4.0.0              # 默认主力模型
+xgboost>=1.7.0               # 备选
+
+# === 统计 & 波动率 ===
+arch>=6.0.0                  # GARCH / 波动率模型
+statsmodels>=0.14.0          # 时间序列/统计检验
+
+# === 可视化 ===
+matplotlib>=3.7.0
+plotly>=5.18.0               # 交互式
+
+# === 超参优化 ===
+optuna>=3.0.0
+
+# === 凸优化 (可选，提升 portfolio) ===
+cvxpy>=1.3.0                 # 凸优化
+# mosek>=10.0.0              # 商业求解器加速
+
+# === 深度 & 神经网络 (可选，启用NeuralSDE/TFT/GNN) ===
+torch>=2.0.0                 # 基础的PyTorch
+# pytorch-forecasting>=1.0   # TFT
+# torch-geometric>=2.3       # GNN
+
+# === 金融工具 (可选) ===
+# yfinance>=0.2.0            # Yahoo Finance
+# tushare>=1.2.80            # 备选中国数据
+# baostock>=0.8.8            # 备选中国数据
+
+# === 分布式/缓存 (可选) ===
+# redis>=5.0.0               # 分布式缓存
+# websockets>=12.0           # 实时数据流
+
+# === 测试/开发 ===
+# pytest>=7.4.0
+# pytest-xdist>=3.0.0        # 并行测试

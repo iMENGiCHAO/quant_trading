@@ -1,0 +1,1 @@
+"""Hyperion Infrastructure Layer — logging, config validation, error handling, Docker."""
