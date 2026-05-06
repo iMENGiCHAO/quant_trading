@@ -1,0 +1,85 @@
+# Hyperion Quant v1.0 配置文件
+# ===============================
+
+data:
+  source: akshare
+  db_path: "~/.quant_trading/ashare.db"
+  cache_dir: "~/.quant_trading/cache"
+  start_date: "2023-01-01"
+  end_date: "2025-12-31"
+  symbols:
+    - "000300.SH"
+    - "000905.SH"
+  fields:
+    - open
+    - high
+    - low
+    - close
+    - volume
+    - amount
+    - turnover
+  use_parquet_cache: true
+  purge_days: 5
+
+alpha:
+  use_alpha158: true
+  use_alpha360: false
+  use_bayesian: true
+  bayesian_window: 60
+  use_causal: false
+  indicators:
+    - rsi
+    - macd
+    - bbands
+    - atr
+    - sma
+    - ema
+  min_ic: 0.02
+  max_correlation: 0.7
+
+strategy:
+  name: "ml_multi_factor"
+  label: "forward_return_5d"
+  rebalance_freq: "monthly"
+  max_positions: 30
+  train_ratio: 0.7
+  val_ratio: 0.15
+
+engine:
+  mode: "backtest"
+  initial_capital: 1000000.0
+  commission: 0.0003
+  slippage: 0.001
+  stamp_duty: 0.001
+  t_plus_1: true
+  price_limit: 0.10
+  st_filter: true
+
+risk:
+  max_position_pct: 0.10
+  max_sector_pct: 0.30
+  max_total_exposure: 0.95
+  stop_loss_pct: 0.05
+  daily_loss_limit: 0.03
+  optimization_method: "risk_budgeting"
+
+execution:
+  broker: "paper"
+  algo: "twap"
+  order_timeout: 300
+
+hyperopt:
+  objective: "sharpe"
+  max_evals: 500
+  cv_folds: 5
+  search_space: "strategy_params"
+  sampler: "tpe"
+  pruner: "median"
+  n_jobs: 1
+  multi_objectives: []
+
+analysis:
+  benchmark: "000300.SH"
+  risk_free_rate: 0.03
+  report_format: "html"
+  plot: true

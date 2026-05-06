@@ -1,0 +1,40 @@
+# Hyperion Quant v27.0 — 依赖清单
+# ===============================
+# Python 3.10+
+# 核心: 练+回测+预测+组合优化 全链路
+
+# === 核心依赖 (必须) ===
+numpy>=1.24.0
+pandas>=2.0.0
+scipy>=1.10.0
+scikit-learn>=1.3.0
+pyyaml>=6.0
+
+# === 数据源 ===
+akshare>=1.14.0           # 中国A股数据
+# tushare>=1.2.80          # 备选数据源
+# baostock>=0.8.8          # 备选数据源
+
+# === 回测 & 超参优化 ===
+optuna>=3.0.0              # 贝叶斯优化
+# backtrader>=1.9.78       # 可选事件驱动回测参考
+
+# === ML模型 ===
+lightgbm>=4.0.0            # LightGBM (默认启用)
+xgboost>=1.7.0             # XGBoost (默认启用)
+# catboost>=1.2.0          # CatBoost (可选)
+# torch>=2.0.0             # PyTorch (NeuralSDE/TFT/GNN需要)
+# pytorch-forecasting>=1.0 # TFT模型
+# torch-geometric>=2.3     # GNN模型
+
+# === 可视化 (可选) ===
+matplotlib>=3.7.0          # 回测曲线
+# plotly>=5.18.0           # 交互式
+# gradio>=4.0.0            # Web可视化面板
+
+# === 工具 ===
+tqdm>=4.65.0               # 进度条
+joblib>=1.3.0              # 并行计算
+python-dateutil>=2.8.0     # 日期处理
+# redis>=5.0.0             # 分布式缓存(可选)
+# websockets>=12.0         # 实时数据流(可选)
