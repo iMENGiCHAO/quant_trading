@@ -22,9 +22,10 @@ from dataclasses import dataclass, field
 from enum import Enum
 
 from ..data.market import (
-    fetch_realtime_quotes, fetch_history, fetch_index_quotes,
+    fetch_realtime_quotes, fetch_history, fetch_index_quotes, DataUnavailableError,
     CORE_STOCKS, INDICES, get_stock_name, get_stock_industry
 )
+from ..performance.tracker import PerformanceTracker
 from .technical import TechnicalAnalyzer
 from .market_state import MarketStateAnalyzer
 from .signals import Signal, SignalGenerator
@@ -62,6 +63,8 @@ class InvestmentDecision:
     name: str
     industry: str
     timestamp: str
+    data_freshness: str = "实时"           # 数据新鲜度标记
+    performance_context: dict = field(default_factory=dict)  # 绩效背景
     
     # === 评分体系 ===
     decision: str                     # 决策类型
@@ -125,6 +128,9 @@ class InvestmentDecision:
     def to_dict(self) -> dict:
         return {
             "code": self.code, "name": self.name, "industry": self.industry,
+            "timestamp": self.timestamp,
+            "data_freshness": self.data_freshness,
+            "performance_context": self.performance_context,
             "decision": self.decision, "composite_score": self.composite_score,
             "confidence": self.confidence,
             "technical_score": self.technical_score,
@@ -175,6 +181,7 @@ class InvestmentDecisionEngine:
     def __init__(self):
         self.signal_gen = SignalGenerator()
         self.tech_analyzer = TechnicalAnalyzer()
+        self.performance_tracker = PerformanceTracker()
     
     # ==========================================================
     #  主入口：生成单个标的的完整投资决策
@@ -300,17 +307,22 @@ class InvestmentDecisionEngine:
             stop_loss, tp1, tp2, max_position, holding_period
         )
         
-        # === 23. 生成摘要 ===
+        # === 23. 自动记录信号 (买入/卖出决策) ===
+        # 只在决策有实际行动价值时记录
+        # 延迟记录，等InvestmentDecision创建后再记
+        
+        # === 24. 生成摘要 ===
         summary = self._generate_summary(
             decision, composite_score, current_price, targets,
             stop_loss, rr_ratio, holding_period, market
         )
         
-        return InvestmentDecision(
+        decision_obj = InvestmentDecision(
             code=code,
             name=name,
             industry=industry,
             timestamp=datetime.now().isoformat(),
+            data_freshness=f"{len(history)}天/{datetime.now().strftime('%H:%M')}",
             decision=decision.value,
             composite_score=round(composite_score, 1),
             confidence=round(confidence, 2),
@@ -347,6 +359,15 @@ class InvestmentDecisionEngine:
             action_plan=action_plan,
             summary=summary,
         )
+        
+        # 自动记录信号 (仅记录有明确方向的)
+        if abs(composite_score) > 30:
+            try:
+                self.performance_tracker.log_signal(decision_obj)
+            except Exception:
+                pass  # 信号记录失败不影响主流程
+        
+        return decision_obj
     
     # ==========================================================
     #  评分子模块
@@ -1000,10 +1021,16 @@ class InvestmentDecisionEngine:
         return [d for d in all_decisions if d.composite_score < -30][:n]
 
     def market_outlook_report(self) -> dict:
-        """市场展望 + 操作指南"""
+        """市场展望 + 操作指南 + 绩效追踪"""
         market = MarketStateAnalyzer.generate_outlook()
         top = self.top_picks(10)
         warnings = self.risk_warnings(5)
+        
+        # 获取绩效追踪数据
+        try:
+            perf_summary = self.performance_tracker.get_performance_summary()
+        except Exception:
+            perf_summary = {"total_signals_ever": 0, "buy_win_rate": 0, "message": "绩效数据暂不可用"}
         industries = {}
         for d in top:
             industries.setdefault(d.industry, []).append(d.name)
@@ -1031,10 +1058,16 @@ class InvestmentDecisionEngine:
         
         return {
             "timestamp": datetime.now().isoformat(),
+            "data_freshness": "实时数据" if perf_summary.get("total_signals_ever", 0) > 0 else "首次运行",
             "market_state": market,
             "top_picks": [d.to_dict() for d in top],
             "risk_warnings": [d.to_dict() for d in warnings],
             "industry_allocation": industries,
             "portfolio_advice": portfolio_advice,
+            "performance": {
+                "total_signals": perf_summary.get("total_signals_ever", 0),
+                "buy_win_rate": perf_summary.get("buy_win_rate", 0),
+                "avg_return": perf_summary.get("cumulative_avg_return", 0),
+            },
             "summary": "\n".join(summary_lines),
         }

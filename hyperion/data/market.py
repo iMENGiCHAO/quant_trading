@@ -35,6 +35,11 @@ from . import (
     get_stock_name, get_stock_industry,
 )
 
+
+class DataUnavailableError(Exception):
+    """数据不可用异常 —— 所有 API 失败时必须抛出此异常，禁止静默返回假数据"""
+    pass
+
 # ==========================================================
 #  缓存管理
 # ==========================================================
@@ -243,7 +248,7 @@ def _fetch_realtime_akshare(symbols: Optional[List[str]] = None) -> pd.DataFrame
         
     except Exception as e:
         print(f"[数据] akShare实时行情获取失败: {e}")
-        return _generate_demo_quotes(symbols)
+        raise DataUnavailableError('实时行情获取失败: 所有数据源均不可用')
 
 
 def fetch_index_quotes() -> pd.DataFrame:
@@ -321,7 +326,7 @@ def fetch_index_quotes() -> pd.DataFrame:
     except Exception as e:
         print(f"[数据] Sina指数行情获取失败: {e}")
     
-    return _generate_demo_index_quotes()
+    raise DataUnavailableError('指数行情获取失败: 所有数据源均不可用')
 
 
 # ==========================================================
@@ -426,7 +431,7 @@ def _fetch_history_akshare(symbol: str, days: int = 250) -> pd.DataFrame:
     except Exception as e:
         print(f"[数据] akShare {symbol} K线获取失败: {e}")
     
-    return _generate_demo_history(symbol, days)
+    raise DataUnavailableError(f'{symbol} 历史K线获取失败: 所有数据源均不可用')
 
 
 def fetch_batch_history(symbols: List[str], days: int = 250,
@@ -454,136 +459,16 @@ def fetch_batch_history(symbols: List[str], days: int = 250,
 
 
 # ==========================================================
-#  Demo 模式 (离线可用)
+#  数据完整性保障
+# ==========================================================
+#  所有数据请求失败时将抛出 DataUnavailableError
+#  绝不静默降级返回假数据
 # ==========================================================
 
-def _generate_demo_quotes(symbols: Optional[List[str]] = None) -> pd.DataFrame:
-    """生成仿真实时行情"""
-    np.random.seed(int(time.time()) % 10000)
-    
-    rows = []
-    stock_list = symbols if symbols else [c for c, _, _ in CORE_STOCKS]
-    
-    base_prices = {
-        "600519": 1500, "000858": 130, "000568": 180, "600809": 220,
-        "600036": 35, "601398": 6, "601939": 7, "601166": 18,
-        "601318": 45, "601628": 35, "600030": 22, "601688": 15,
-        "300059": 18, "000333": 65, "000651": 40, "600690": 28,
-        "300750": 200, "601012": 25, "600900": 28, "600585": 25,
-        "002415": 35, "000002": 10, "600048": 9, "600276": 45,
-        "603259": 55, "002475": 30, "000725": 5, "002714": 45,
-        "601899": 15, "600887": 28, "000001": 12, "002352": 40,
-        "688981": 55, "603501": 100, "002594": 250, "601985": 10,
-        "601088": 35, "600028": 6, "601857": 8, "601728": 5,
-        "600941": 100, "002230": 60, "300760": 280, "300015": 15,
-        "603288": 38, "000538": 50, "600196": 25, "300124": 65,
-        "002129": 35,
-    }
-    
-    for code in stock_list:
-        if code not in base_prices:
-            continue
-        base = base_prices.get(code, 50)
-        change_pct = np.random.normal(0, 1.5)
-        price = base * (1 + change_pct / 100)
-        
-        rows.append({
-            "code": code,
-            "name": get_stock_name(code),
-            "price": round(price, 2),
-            "change_pct": round(change_pct, 2),
-            "change": round(price - base, 2),
-            "volume": int(np.random.lognormal(12, 1)),
-            "amount": int(np.random.lognormal(17, 1)),
-            "turnover": round(np.random.uniform(0.5, 5), 2),
-            "pe_ttm": round(np.random.uniform(10, 50), 2),
-            "pb": round(np.random.uniform(1, 8), 2),
-            "total_mv": int(base * np.random.uniform(0.5, 2) * 1e8),
-            "open": round(base * (1 + np.random.normal(0, 0.005)), 2),
-            "high": round(base * (1 + abs(np.random.normal(0, 0.01))), 2),
-            "low": round(base * (1 - abs(np.random.normal(0, 0.01))), 2),
-            "pre_close": round(base, 2),
-            "industry": get_stock_industry(code),
-        })
-    
-    df = pd.DataFrame(rows)
-    if not df.empty:
-        _save_cache(_cache_key("realtime", "demo"), df)
-    return df
 
 
-def _generate_demo_index_quotes() -> pd.DataFrame:
-    """生成仿真指数行情"""
-    np.random.seed(int(time.time()) % 10000 + 100)
-    
-    base_values = {
-        "000001.SH": 3300, "399001.SZ": 10500, "399006.SZ": 2100,
-        "000688.SH": 950, "000300.SH": 3900, "000905.SH": 5800,
-        "000016.SH": 2650, "399673.SZ": 1050,
-    }
-    
-    rows = []
-    for code, name in INDICES.items():
-        base = base_values.get(code, 3000)
-        change_pct = np.random.normal(0, 0.8)
-        price = base * (1 + change_pct / 100)
-        
-        rows.append({
-            "code": code, "name": name,
-            "price": round(price, 2),
-            "change_pct": round(change_pct, 2),
-            "change": round(price - base, 2),
-            "volume": int(np.random.lognormal(15, 1)),
-            "amount": int(np.random.lognormal(20, 1)),
-        })
-    
-    return pd.DataFrame(rows)
 
 
-def _generate_demo_history(symbol: str, days: int = 250) -> pd.DataFrame:
-    """基于几何布朗运动生成仿真历史K线"""
-    np.random.seed(hash(symbol) % (2**31))
-    
-    base_prices = {
-        "600519": 1500, "000858": 130, "000568": 180, "600809": 220,
-        "300750": 200, "601012": 25, "002594": 250, "688981": 55,
-    }
-    base = base_prices.get(symbol, 50)
-    
-    end_date = datetime.now()
-    dates = pd.bdate_range(end=end_date, periods=min(days, 252*3))
-    n = len(dates)
-    
-    industry = get_stock_industry(symbol)
-    vol_map = {
-        "银行": 0.015, "保险": 0.018, "证券": 0.022,
-        "食品饮料": 0.018, "医药": 0.022, "新能源": 0.028,
-        "半导体": 0.030, "家电": 0.016, "房地产": 0.025,
-        "电力": 0.012, "煤炭": 0.018, "石油": 0.016,
-    }
-    mu_map = {
-        "食品饮料": 0.0008, "医药": 0.0007, "新能源": 0.0005,
-        "半导体": 0.0010, "银行": 0.0003, "保险": 0.0004,
-    }
-    
-    sigma = vol_map.get(industry, 0.020)
-    mu = mu_map.get(industry, 0.0004)
-    
-    dt = 1.0
-    returns = np.random.normal(mu * dt, sigma * np.sqrt(dt), n)
-    price_path = base * np.exp(np.cumsum(returns))
-    price_path = np.maximum(price_path, base * 0.3)
-    
-    df = pd.DataFrame({"date": dates, "close": price_path})
-    df["open"] = df["close"].shift(1) * (1 + np.random.normal(0, 0.003, n))
-    df["open"] = df["open"].fillna(df["close"] * 0.99)
-    df["high"] = df[["open", "close"]].max(axis=1) * (1 + abs(np.random.normal(0, 0.005, n)))
-    df["low"] = df[["open", "close"]].min(axis=1) * (1 - abs(np.random.normal(0, 0.005, n)))
-    df["volume"] = np.random.lognormal(12, 0.8, n).astype(int)
-    df["amount"] = (df["volume"] * df["close"] * 100).astype(int)
-    df["change_pct"] = df["close"].pct_change() * 100
-    
-    return df
 
 
 # ==========================================================
@@ -636,7 +521,7 @@ def money_flow(symbol: str) -> dict:
     try:
         df = fetch_history(symbol, days=30)
         if df.empty or len(df) < 5:
-            return _demo_money_flow(symbol)
+            raise DataUnavailableError(f'{symbol} 资金流向数据不可用')
         
         close = df["close"].values
         volume = df["volume"].values
@@ -674,30 +559,7 @@ def money_flow(symbol: str) -> dict:
             ),
         }
     except Exception:
-        return _demo_money_flow(symbol)
-
-
-def _demo_money_flow(symbol: str) -> dict:
-    """Demo money flow"""
-    np.random.seed(hash(f"{symbol}_flow") % (2**31))
-    total_amount = np.random.lognormal(17, 0.5)
-    main_force_ratio = np.random.uniform(-0.05, 0.08)
-    main_force = total_amount * main_force_ratio
-    retail_ratio = np.random.uniform(-0.03, 0.03)
-    retail = total_amount * retail_ratio
-    net_flow = main_force + retail
-    
-    return {
-        "total_amount": int(total_amount),
-        "main_force": int(main_force),
-        "main_force_ratio": round(main_force_ratio * 100, 2),
-        "retail": int(retail * 0.3),
-        "retail_ratio": round(retail_ratio * 100, 2),
-        "medium": 0,
-        "medium_ratio": 0,
-        "net_flow": int(net_flow),
-        "signal": "主力流入" if main_force > 0 else "主力流出",
-    }
+        raise DataUnavailableError(f'{symbol} 资金流向数据不可用')
 
 
 # ==========================================================

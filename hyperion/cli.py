@@ -33,6 +33,8 @@ from hyperion.analysis.market_state import MarketStateAnalyzer
 from hyperion.analysis.decision_engine import InvestmentDecisionEngine, InvestmentDecision
 from hyperion.engine.backtest import BacktestEngine, strategy_report, quick_backtest
 from hyperion.strategy.base import list_strategies
+from hyperion.analysis.signal_alerts import SignalAlertSystem, AlertLevel
+from hyperion.analysis.trade_journal import TradeJournal, monthly_summary
 
 REPORTS_DIR = Path.home() / ".hyperion_data" / "reports"
 REPORTS_DIR.mkdir(parents=True, exist_ok=True)
@@ -461,10 +463,17 @@ def main():
     parser.add_argument("--backtest", type=str, nargs="*", help="策略回测对比（可指定股票代码）")
     parser.add_argument("--bt-strategy", type=str, default=None, help="指定回测策略")
     parser.add_argument("--bt-days", type=int, default=250, help="回测天数")
+    parser.add_argument("--alerts", action="store_true", help="扫描实时预警信号")
+    parser.add_argument("--alert-level", type=str, default="WARNING", choices=["INFO","WARNING","CRITICAL"], help="预警最低级别")
+    parser.add_argument("--journal", action="store_true", help="交易日志概览")
+    parser.add_argument("--journal-entry", type=str, nargs="*", help="记录买入: --journal-entry 600519 1850 100 '理由'")
+    parser.add_argument("--journal-exit", type=str, nargs="*", help="记录卖出: --journal-exit trade_id 1980 '理由'")
+    parser.add_argument("--monthly", type=str, help="月度报告: --monthly 2026-06")
     
     args = parser.parse_args()
     
-    has_cmd = any([args.stock, args.top is not None, args.risk, args.market, args.data, args.backtest is not None])
+    has_cmd = any([args.stock, args.top is not None, args.risk, args.market, args.data, args.backtest is not None,
+                     args.alerts, args.journal, args.journal_entry is not None, args.journal_exit is not None, args.monthly is not None])
     
     try:
         if args.data:
@@ -484,6 +493,47 @@ def main():
         
         if args.backtest is not None:
             backtest_report(args.backtest, args.bt_strategy, args.bt_days)
+        
+        if args.alerts:
+            print(f"\n  {_bold('═══ 实时预警扫描 ═══')}\n")
+            alerts_sys = SignalAlertSystem()
+            alerts = alerts_sys.scan_all()
+            alerts_sys.print_alerts(alerts)
+            print(f"\n  共 {len(alerts)} 条预警")
+        
+        if args.journal:
+            journal = TradeJournal()
+            journal.print_performance_overview()
+        
+        if args.journal_entry is not None and len(args.journal_entry) >= 3:
+            code = args.journal_entry[0]
+            price = float(args.journal_entry[1])
+            qty = int(args.journal_entry[2])
+            reason = ' '.join(args.journal_entry[3:]) if len(args.journal_entry) > 3 else ""
+            journal = TradeJournal()
+            journal.record_entry(code=code, entry_price=price, quantity=qty, entry_reason=reason)
+        
+        if args.journal_exit is not None and len(args.journal_exit) >= 2:
+            trade_id = args.journal_exit[0]
+            exit_price = float(args.journal_exit[1])
+            reason = ' '.join(args.journal_exit[2:]) if len(args.journal_exit) > 2 else "手动平仓"
+            journal = TradeJournal()
+            journal.record_exit(trade_id=trade_id, exit_price=exit_price, exit_reason=reason)
+        
+        if args.monthly is not None:
+            parts = args.monthly.split('-')
+            if len(parts) == 2:
+                year, month = int(parts[0]), int(parts[1])
+                report = monthly_summary(year, month)
+                print(f"\n  {_bold(f'═══ {year}年{month}月交易报告 ═══')}\n")
+                if report.get('total_trades', 0) == 0:
+                    print(f"  📭 {report.get('message', '本月无交易')}")
+                else:
+                    print(f"  总交易: {report['total_trades']} | 盈利: {report['win_trades']} | 亏损: {report['loss_trades']}")
+                    print(f"  胜率: {report['win_rate']:.1f}% | 总盈亏: ¥{report['total_pnl']:+,.2f}")
+                    print(f"  最大盈利: +{report.get('max_win',0):.2f}% | 最大亏损: {report.get('max_loss',0):.2f}%")
+                    if report.get('recommendation'):
+                        print(f"\n  💡 {report['recommendation']}")
         
         if not has_cmd:
             full_daily_brief()

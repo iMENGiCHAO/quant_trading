@@ -6,7 +6,9 @@ Hyperion Pro — 回测引擎
 功能:
   1. 事件驱动回测 (Event-Driven Backtesting)
   2. 多策略并行回测
-  3. 完整绩效指标:
+  3. 样本外验证 (Out-of-Sample / Walk-Forward)
+  4. 真实交易成本建模 (A股佣金+印花税+滑点)
+  5. 完整绩效指标:
      - Sharpe Ratio (年化夏普)
      - Sortino Ratio (下行夏普)
      - Max Drawdown + Duration
@@ -106,11 +108,13 @@ class BacktestEngine:
         print(result.summary)
     """
     
-    def __init__(self, initial_capital: float = 100000.0, 
-                 commission_rate: float = 0.0003,
-                 slippage_pct: float = 0.001):
+    def __init__(self, initial_capital: float = 100000.0,
+                 commission_rate: float = 0.0003,    # 券商佣金 0.03%
+                 stamp_duty: float = 0.001,          # 印花税 0.1% (仅卖出)
+                 slippage_pct: float = 0.002):        # 滑点 0.2%
         self.initial_capital = initial_capital
         self.commission_rate = commission_rate
+        self.stamp_duty = stamp_duty
         self.slippage_pct = slippage_pct
     
     def run(self, code: str, strategy_name: str = "TrendFollowingStrategy",
@@ -221,10 +225,16 @@ class BacktestEngine:
                 )
                 
                 if should_exit:
-                    # 计算滑点和佣金
+                    # 真实交易成本: 滑点 + 佣金(买卖双向) + 印花税(卖出)
                     exit_price = current_price * (1 - self.slippage_pct)
                     
-                    return_pct = (exit_price / entry_price - 1) * 100
+                    # 成本模型 (A股)
+                    buy_cost = entry_price * self.commission_rate          # 买入佣金
+                    sell_cost = exit_price * (self.commission_rate + self.stamp_duty)  # 卖出佣金+印花税
+                    total_cost = buy_cost + sell_cost
+                    
+                    # 净收益 (考虑滑点和交易成本)
+                    return_pct = ((exit_price - total_cost) / (entry_price + buy_cost) - 1) * 100
                     holding_days = i - entry_idx
                     
                     # 期间最大回撤
@@ -466,6 +476,103 @@ class BacktestEngine:
             f"胜率{win_rate:.0f}% | "
             f"交易{n_trades}次"
         )
+
+
+    def run_walk_forward(self, code: str, strategy_name: str = "MultiFactorAlphaStrategy",
+                          train_ratio: float = 0.7, days: int = 252) -> dict:
+        """
+        样本外验证 — Walk-Forward回测
+        
+        Args:
+            code: 股票代码
+            strategy_name: 策略名
+            train_ratio: 训练集比例 (默认70%训练, 30%测试)
+            days: 总回测天数
+            
+        Returns:
+            dict: {train_result, test_result, out_of_sample_sharpe, overfitting_ratio}
+        """
+        df = fetch_history(code, days=days)
+        if df.empty or len(df) < 60:
+            return {"error": "数据不足"}
+        
+        split_idx = int(len(df) * train_ratio)
+        train_df = df.iloc[:split_idx].copy()
+        test_df = df.iloc[split_idx:].copy()
+        
+        # 训练集回测
+        train_result = self._run_on_df(train_df, code, strategy_name)
+        
+        # 测试集回测
+        test_result = self._run_on_df(test_df, code, strategy_name)
+        
+        # 过拟合检测: 样本内/样本外夏普比率
+        train_sharpe = train_result.get("sharpe_ratio", 0) if train_result else 0
+        test_sharpe = test_result.get("sharpe_ratio", 0) if test_result else 0
+        
+        # 过拟合比率: test_sharpe / train_sharpe (>0.5 即可接受)
+        overfit_ratio = test_sharpe / max(train_sharpe, 0.01)
+        
+        rating = "优秀(样本外有效)" if overfit_ratio > 0.8 else (
+            "良好" if overfit_ratio > 0.5 else "过拟合风险"
+        )
+        
+        return {
+            "code": code,
+            "strategy": strategy_name,
+            "train_period": f"{train_df['date'].iloc[0]} ~ {train_df['date'].iloc[-1]}",
+            "test_period": f"{test_df['date'].iloc[0]} ~ {test_df['date'].iloc[-1]}",
+            "train_sharpe": round(train_sharpe, 3),
+            "test_sharpe": round(test_sharpe, 3),
+            "overfitting_ratio": round(overfit_ratio, 3),
+            "rating": rating,
+            "train_result": train_result,
+            "test_result": test_result,
+        }
+    
+    def _run_on_df(self, df: pd.DataFrame, code: str, strategy_name: str) -> Optional[dict]:
+        """在给定DataFrame上运行回测"""
+        if len(df) < 60:
+            return None
+        
+        name = get_stock_name(code)
+        
+        strategy_cls = get_strategy(strategy_name)
+        if strategy_cls is None:
+            return None
+        strategy_cls = strategy_cls.__class__()
+        
+        signals = strategy_cls.generate_signals(df, code, name)
+        trades = self._simulate_trades(df, signals, strategy_cls)
+        
+        if not trades:
+            return None
+        
+        result = self._compute_performance(trades, df, code, name, strategy_name)
+        return result.to_dict() if result else None
+    
+    def batch_walk_forward(self, codes: List[str] = None,
+                            strategy_name: str = "MultiFactorAlphaStrategy",
+                            days: int = 252) -> pd.DataFrame:
+        """批量样本外验证"""
+        if codes is None:
+            from ..data.market import CORE_STOCKS
+            codes = [c for c, _, _ in CORE_STOCKS[:30]]
+        
+        rows = []
+        for code in codes:
+            try:
+                wf = self.run_walk_forward(code, strategy_name, days=days)
+                if wf and "error" not in wf:
+                    rows.append(wf)
+            except Exception:
+                continue
+        
+        df = pd.DataFrame(rows)
+        if not df.empty:
+            df.sort_values("test_sharpe", ascending=False, inplace=True)
+        
+        return df
 
 
 # ── 便捷函数 ────────────────────────────────────────────
